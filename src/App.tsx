@@ -189,14 +189,21 @@ const Dashboard = () => {
         }),
       });
       
-      if (!response.ok) throw new Error("Failed to analyze structure. Please check your connection.");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.details || "Failed to analyze structure. Please check your connection.");
+      }
       
       const data = await response.json();
       
       // 2. Call Gemini for Explanation (Frontend)
       let explanation = "Analysis complete. The protein structure has been predicted and potential drug candidates have been identified.";
       
-      const apiKey = process.env.GEMINI_API_KEY;
+      // Use Vite-compatible env access or fallback for AI Studio environment
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || 
+                    (window as any).GEMINI_API_KEY || 
+                    (window as any).process?.env?.GEMINI_API_KEY;
+      
       if (apiKey) {
         try {
           const genAI = new GoogleGenAI({ apiKey });

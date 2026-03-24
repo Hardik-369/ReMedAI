@@ -1,9 +1,8 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import axios from "axios";
 import dotenv from "dotenv";
+import axios from "axios";
 
 dotenv.config();
 
@@ -11,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -25,7 +24,12 @@ const diseaseMap: Record<string, string> = {
 
 // API Routes
 app.post("/api/analyze", async (req, res) => {
+  console.log("Analyze request received:", req.body);
   try {
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({ error: "Request body is empty or missing" });
+    }
+
     const { disease, proteinSequence } = req.body;
     let sequence = proteinSequence;
 
@@ -74,8 +78,9 @@ END`;
           }
         );
         pdbData = nimResponse.data.pdb || pdbData;
-      } catch (nimError) {
-        console.error("NIM API Error:", nimError);
+      } catch (nimError: any) {
+        console.error("NIM API Error:", nimError.message);
+        // We continue with mock data if API fails to avoid 500
       }
     }
 
@@ -94,34 +99,38 @@ END`;
     });
   } catch (error) {
     console.error("Analysis Error:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+    res.status(500).json({ 
+      error: "Internal Server Error", 
+      details: error instanceof Error ? error.message : String(error) 
+    });
   }
 });
 
-async function startServer() {
+// Serve frontend in production
+if (process.env.NODE_ENV === "production") {
+  const distPath = path.join(process.cwd(), "dist");
+  app.use(express.static(distPath));
+  app.get("*", (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: "API route not found" });
+    }
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+} else {
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  // Only listen if not running as a serverless function (Vercel)
-  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
+  const { createServer: createViteServer } = await import("vite");
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: "spa",
+  });
+  app.use(vite.middlewares);
 }
 
-startServer();
+// Only listen if not running as a serverless function (Vercel)
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
 
 export default app;
