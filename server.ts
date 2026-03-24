@@ -108,14 +108,10 @@ END`;
 
 // Serve frontend in production
 if (process.env.NODE_ENV === "production") {
+  // On Vercel, static files are handled by vercel.json routes
+  // But we keep this for local production testing
   const distPath = path.join(process.cwd(), "dist");
   app.use(express.static(distPath));
-  app.get("*", (req, res) => {
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: "API route not found" });
-    }
-    res.sendFile(path.join(distPath, "index.html"));
-  });
 } else {
   // Vite middleware for development
   const { createServer: createViteServer } = await import("vite");
@@ -125,6 +121,11 @@ if (process.env.NODE_ENV === "production") {
   });
   app.use(vite.middlewares);
 }
+
+// Health check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", env: process.env.NODE_ENV, vercel: !!process.env.VERCEL });
+});
 
 // Only listen if not running as a serverless function (Vercel)
 if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
