@@ -10,37 +10,36 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-  app.use(express.json());
+app.use(express.json());
 
-  // Disease to Protein Mapping (Mock)
-  const diseaseMap: Record<string, string> = {
-    "Alzheimer's": "MDSKGSSQKGSRLLLLLVVSNLLLCQGVVSTPVCPNGPGNCQVSLRDLFDRAVMVSHYIHDLSS",
-    "Diabetes": "MALWMRLLPLLALLALWGPDPAAAFVNQHLCGSHLVEALYLVCGERGFFYTPKTRREAEDLQVG",
-    "Cancer": "MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAP",
-    "COVID-19": "MFVFLVLLPLVSSQCVNLTTRTQLPPAYTNSFTRGVYYPDKVFRSSVLHSTQDLFLPFFSNVTW",
-  };
+// Disease to Protein Mapping (Mock)
+const diseaseMap: Record<string, string> = {
+  "Alzheimer's": "MDSKGSSQKGSRLLLLLVVSNLLLCQGVVSTPVCPNGPGNCQVSLRDLFDRAVMVSHYIHDLSS",
+  "Diabetes": "MALWMRLLPLLALLALWGPDPAAAFVNQHLCGSHLVEALYLVCGERGFFYTPKTRREAEDLQVG",
+  "Cancer": "MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAP",
+  "COVID-19": "MFVFLVLLPLVSSQCVNLTTRTQLPPAYTNSFTRGVYYPDKVFRSSVLHSTQDLFLPFFSNVTW",
+};
 
-  // API Routes
-  app.post("/api/analyze", async (req, res) => {
-    try {
-      const { disease, proteinSequence } = req.body;
-      let sequence = proteinSequence;
+// API Routes
+app.post("/api/analyze", async (req, res) => {
+  try {
+    const { disease, proteinSequence } = req.body;
+    let sequence = proteinSequence;
 
-      if (disease && !sequence) {
-        sequence = diseaseMap[disease] || "MDSKGSSQKGSRLLLLLVVSNLLLCQGVVSTPVCPNGPGNCQVSLRDLFDRAVMVSHYIHDLSS";
-      }
+    if (disease && !sequence) {
+      sequence = diseaseMap[disease] || "MDSKGSSQKGSRLLLLLVVSNLLLCQGVVSTPVCPNGPGNCQVSLRDLFDRAVMVSHYIHDLSS";
+    }
 
-      if (!sequence) {
-        return res.status(400).json({ error: "Missing disease or protein sequence" });
-      }
+    if (!sequence) {
+      return res.status(400).json({ error: "Missing disease or protein sequence" });
+    }
 
-      // 1. Call NVIDIA NIM API (ESMFold)
-      // Note: Using a mock response if API key is missing or for demo purposes
-      let pdbData = `HEADER    PROTEIN STRUCTURE MOCK
+    // 1. Call NVIDIA NIM API (ESMFold)
+    // Note: Using a mock response if API key is missing or for demo purposes
+    let pdbData = `HEADER    PROTEIN STRUCTURE MOCK
 ATOM      1  N   MET A   1      27.340  24.430   2.614  1.00  9.67           N
 ATOM      2  CA  MET A   1      26.266  25.413   2.842  1.00 10.38           C
 ATOM      3  C   MET A   1      26.913  26.639   3.531  1.00 11.29           C
@@ -60,44 +59,46 @@ ATOM     16  C   GLY A   3      31.106  29.022   2.648  1.00 14.89           C
 ATOM     17  O   GLY A   3      32.331  29.085   2.748  1.00 15.06           O
 TER      18      GLY A   3
 END`;
-      
-      if (process.env.NVIDIA_NIM_API_KEY) {
-        try {
-          const nimResponse = await axios.post(
-            "https://health.api.nvidia.com/v1/biology/nvidia/esmfold",
-            { sequence },
-            {
-              headers: {
-                Authorization: `Bearer ${process.env.NVIDIA_NIM_API_KEY}`,
-                Accept: "application/json",
-              },
-            }
-          );
-          pdbData = nimResponse.data.pdb || pdbData;
-        } catch (nimError) {
-          console.error("NIM API Error:", nimError);
-        }
+    
+    if (process.env.NVIDIA_NIM_API_KEY) {
+      try {
+        const nimResponse = await axios.post(
+          "https://health.api.nvidia.com/v1/biology/nvidia/esmfold",
+          { sequence },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.NVIDIA_NIM_API_KEY}`,
+              Accept: "application/json",
+            },
+            timeout: 8000, // 8 seconds timeout to stay within Vercel's 10s limit
+          }
+        );
+        pdbData = nimResponse.data.pdb || pdbData;
+      } catch (nimError) {
+        console.error("NIM API Error:", nimError);
       }
-
-      // 2. Generate Mock Drugs
-      const drugs = [
-        { name: "Remedivir", score: (Math.random() * 0.25 + 0.7).toFixed(2) },
-        { name: "Alzhonex", score: (Math.random() * 0.25 + 0.7).toFixed(2) },
-        { name: "Glycifort", score: (Math.random() * 0.25 + 0.7).toFixed(2) },
-        { name: "OncoStop", score: (Math.random() * 0.25 + 0.7).toFixed(2) },
-      ].sort((a, b) => Number(b.score) - Number(a.score));
-
-      res.json({
-        pdb: pdbData,
-        drugs,
-        sequence
-      });
-    } catch (error) {
-      console.error("Analysis Error:", error);
-      res.status(500).json({ error: "Internal Server Error" });
     }
-  });
 
+    // 2. Generate Mock Drugs
+    const drugs = [
+      { name: "Remedivir", score: (Math.random() * 0.25 + 0.7).toFixed(2) },
+      { name: "Alzhonex", score: (Math.random() * 0.25 + 0.7).toFixed(2) },
+      { name: "Glycifort", score: (Math.random() * 0.25 + 0.7).toFixed(2) },
+      { name: "OncoStop", score: (Math.random() * 0.25 + 0.7).toFixed(2) },
+    ].sort((a, b) => Number(b.score) - Number(a.score));
+
+    res.json({
+      pdb: pdbData,
+      drugs,
+      sequence
+    });
+  } catch (error) {
+    console.error("Analysis Error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -113,9 +114,14 @@ END`;
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  // Only listen if not running as a serverless function (Vercel)
+  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
